@@ -4,3 +4,4 @@ openai>=1.0.0
 python-dotenv>=0.21.0
 lxml>=5.2.0
 openpyxl>=3.0.0
+tiktoken
