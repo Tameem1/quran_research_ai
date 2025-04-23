@@ -1,25 +1,26 @@
 # Quran Root Analysis Toolkit
 
-This repository provides three complementary Python scripts for extracting, listing and semantically analysing **triliteral Arabic roots** in the Qur’an.
+This repository provides tools for extracting, listing, and semantically analysing **triliteral Arabic roots** in the Qur’an, now with a **Streamlit** web interface:
 
-| Script | Role |
-| ------ | ---- |
-| `extract_roots.py` | Scan the morphology file and output a **frequency‑sorted CSV** of every root that appears in the Qur'an. |
-| `quran_root_extractor.py` | Given a single root (Arabic _or_ Buckwalter), return **all verses** in which that root occurs. |
-| `root_bulk_analyzer.py` | Use **OpenAI GPT‑4o** to generate a rich semantic analysis (definition, synonyms, antonyms, etc.) for **many roots at once**. |
+| Script / App               | Role |
+| -------------------------- | ---- |
+| `extract_roots.py`         | Scan the morphology file and output a **frequency-sorted CSV** of every root that appears in the Qur'an. |
+| `quran_root_extractor.py`  | Given a single root (Arabic _or_ Buckwalter), return **all verses** in which that root occurs (as JSON or stdout). |
+| `root_bulk_analyzer.py`    | Use **OpenAI GPT-4o** to generate a rich semantic analysis (definition, synonyms, antonyms, etc.) for **many roots at once**. |
+| **Streamlit UI**           | A one-page web app (`analyzer_ui.py`) for uploading a CSV/Excel of roots and downloading the bulk analysis. |
 
-> **Last updated:** 2025-04-22
+> **Last updated:** 2025-04-23
 
 ---
 
-## 1. Quick start (recommended defaults)
+## 1. Quick start (command-line)
 
 ```bash
 # create a virtual environment (optional but recommended)
 python -m venv .venv && source .venv/bin/activate
 
 # install required packages
-pip install -r requirements.txt  # see the section below if you don't have this file
+pip install -r requirements.txt
 
 # 1️⃣ extract a list of roots and counts
 python extract_roots.py data/quran-morphology.txt
@@ -27,135 +28,105 @@ python extract_roots.py data/quran-morphology.txt
 # 2️⃣ inspect all verses that contain the root rHm (رحم):
 python quran_root_extractor.py rHm --out verses_rHm.json
 
-# 3️⃣ run the bulk semantic analysis over a list of roots
+# 3️⃣ run the bulk semantic analysis over a list of roots:
 python root_bulk_analyzer.py --roots_csv data/root_sample_1.csv
 ```
 
----
-
 ## 2. Prerequisites
 
-* **Python ≥ 3.9**
-* `pip install` the following PyPI packages (if you do not keep a `requirements.txt`):
+- **Python ≥ 3.9**
+- Install dependencies via:
 
   ```bash
-  pip install openai python-dotenv
+  pip install -r requirements.txt
   ```
 
-* **Data files** (place in the `data/` folder or point to them with CLI flags):
+- **Data files** (place in `data/` or point with CLI flags):
 
-  | File | Source | Purpose |
-  | --- | --- | --- |
-  | `quran-morphology.txt` | Mustafa0x/quran-morphology ✦ TSV | Word‑level morphology with Buckwalter roots |
-  | `quran-uthmani.xml` | Tanzil.net ✦ XML | Uthmani script Qur’an, used to fetch full verse text |
-
----
+  | File                  | Source                               | Purpose                                    |
+  | --------------------- | ------------------------------------ | ------------------------------------------ |
+  | `quran-morphology.txt`| Mustafa0x/quran-morphology (TSV)    | Word-level morphology with Buckwalter roots|
+  | `quran-uthmani.xml`   | Tanzil.net (XML)                    | Uthmani script Qur’an for full verses      |
 
 ## 3. Environment variables
 
-`root_bulk_analyzer.py` requires an **OpenAI API key**:
+`root_bulk_analyzer.py` and the Streamlit app require an **OpenAI API key**:
 
 ```bash
-export OPENAI_API_KEY="sk‑..."
+export OPENAI_API_KEY="sk-..."
 ```
 
-You may alternatively create a `.env` file in the project root:
+Alternatively, create a `.env` file in the project root with:
 
 ```
-OPENAI_API_KEY=sk‑...
+OPENAI_API_KEY=sk-...
 ```
 
-> The script pauses for **1 second** between completions (`RATE_SLEEP`) to stay within the standard GPT‑4o rate limits. Adjust if you have a higher quota.
+## 4. Streamlit UI
 
----
+We’ve provided **`analyzer_ui.py`** for a browser-based workflow:
 
-## 4. Script reference
+1. **Upload** a CSV or Excel file with a column named **`root`** (triliteral roots).
+2. Click **Run bulk analysis 🚀** to call `root_bulk_analyzer.py` under the hood.
+3. **Download** the resulting CSV of semantic analyses.
 
-### 4.1 `extract_roots.py`
-
-| Position | Argument | Description |
-| -------- | -------- | ----------- |
-| 1 (required) | `MORPH_PATH` | Path to `quran-morphology.txt`. |
-| 2 (optional) | `DEST_CSV` | Output file. Defaults to `roots_counts.csv` next to the source file. |
-
-The output CSV has the columns: **root,count,forms** where *forms* is a `;`‑separated list of the surface forms encountered with their counts.
-
-Example:
+Run it with:
 
 ```bash
-python extract_roots.py data/quran-morphology.txt data/roots_counts.csv
+streamlit run analyzer_ui.py
 ```
 
----
+## 5. Script reference
 
-### 4.2 `quran_root_extractor.py`
+### 5.1 `extract_roots.py`
+
+| Position | Argument    | Description                                                   |
+| -------- | ----------- | ------------------------------------------------------------- |
+| 1 (req)  | `MORPH_PATH`| Path to `quran-morphology.txt`.                               |
+| 2 (opt)  | `DEST_CSV`  | Output file. Defaults to `roots_counts.csv`.                 |
+
+Outputs **CSV** with columns: `root,count,forms`.
+
+### 5.2 `quran_root_extractor.py`
 
 ```text
 usage: quran_root_extractor.py ROOT [--morph PATH] [--xml PATH] [--out FILE]
 ```
 
-`ROOT` can be Arabic (`رحم`) or Buckwalter (`rHm`).  
-If you omit `--out`, the JSON is streamed to **stdout**.
+- **ROOT**: Arabic (e.g. `رحم`) or Buckwalter (e.g. `rHm`).
+- Defaults: `--morph data/quran-morphology.txt`, `--xml data/quran-uthmani.xml`.
+- If `--out` omitted, writes to stdout as JSON.
 
-Sample call:
-
-```bash
-python quran_root_extractor.py رحم \
-       --morph data/quran-morphology.txt \
-       --xml   data/quran-uthmani.xml \
-       --out   verses_rHm.json
-```
-
-The JSON structure:
-
-```jsonc
-[
-  {
-    "surah": 1,
-    "ayah": 3,
-    "text": "ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
-    "tokens": ["الرَّحْمَٰنِ", "الرَّحِيمِ"]
-  },
-  ...
-]
-```
-
----
-
-### 4.3 `root_bulk_analyzer.py`
+### 5.3 `root_bulk_analyzer.py`
 
 ```text
 usage: root_bulk_analyzer.py [--roots_csv ROOTS] [--out_csv OUT] [--morph PATH] [--xml PATH]
 ```
 
-| Flag | Default | Meaning |
-| ---- | ------- | ------- |
-| `--roots_csv` | `data/root_sample_1.csv` | UTF‑8 CSV listing roots (column **الجذر** or **root**). |
-| `--out_csv`   | `data/output/roots_analysis.csv` | Destination for the aggregated analysis. |
-| `--morph`     | `data/quran-morphology.txt` | Morphology file for verse extraction. |
-| `--xml`       | `data/quran-uthmani.xml` | Quran XML with Uthmani script. |
+| Flag             | Default                            | Meaning                                            |
+| ---------------- | ---------------------------------- | -------------------------------------------------- |
+| `--roots_csv`    | `data/root_sample_1.csv`           | CSV listing roots (column **root** or **الجذر**).  |
+| `--out_csv`      | `data/output/roots_analysis.csv`   | Destination for the aggregated analysis CSV.       |
+| `--morph`        | `data/quran-morphology.txt`        | Morphology file for verse extraction.             |
+| `--xml`          | `data/quran-uthmani.xml`           | Quran XML with Uthmani script.                    |
 
-**Outputs**
+**Outputs**: A UTF-8 CSV with Arabic headers:
 
-* A CSV with the following Arabic headers  
-  (`الجذر، الشرح، المرادفات، الأضداد، الفرق الدلالي، التحليل الدلالي للسياق، الملخص الدلالي`).
-* Raw GPT replies per root in `logs/<root>.txt` for auditing.
+```
+الجذر، الشرح، المرادفات، الأضداد، الفرق الدلالي، التحليل الدلالي للسياق، الملخص الدلالي
+```
 
-> **Tip:** Tweak the `PROMPT_TEMPLATE` constant inside the script if you need a different explainer style.
+Raw GPT replies per root are saved under `logs/<root>.txt`.
 
----
+## 6. Typical workflow
 
-## 5. Typical workflow
+1. Update/verify data: ensure `quran-morphology.txt` and `quran-uthmani.xml` are fresh.
+2. Generate a ranked list of roots with `extract_roots.py`.
+3. Create or edit your roots CSV (column **root**) and run `root_bulk_analyzer.py` or use the Streamlit UI.
+4. Review `logs/` for raw GPT outputs if needed.
+5. Import the final CSV into your linguistic tool or spreadsheet.
 
-1. **Update/verify data**: make sure `quran-morphology.txt` and `quran-uthmani.xml` are fresh.
-2. **Generate a ranked list** of roots with `extract_roots.py` and choose the ones you care about.
-3. **Create a roots CSV** (or use the sample) and run `root_bulk_analyzer.py`.
-4. **Review the logs** folder for any parsing anomalies; fix the prompt or parser as needed.
-5. **Import the final CSV** into your linguistic tool or spreadsheet.
-
----
-
-## 6. Repository layout
+## 7. Repository layout
 
 ```text
 .
@@ -167,25 +138,22 @@ usage: root_bulk_analyzer.py [--roots_csv ROOTS] [--out_csv OUT] [--morph PATH] 
 ├── extract_roots.py
 ├── quran_root_extractor.py
 ├── root_bulk_analyzer.py
-└── README.md   ← you are here
+├── analyzer_ui.py              ← Streamlit interface
+├── requirements.txt            ← dependency list
+└── README.md                   ← you are here
 ```
 
----
+## 8. Troubleshooting
 
-## 7. Troubleshooting
+- **`FileNotFoundError`**: Check the paths you pass to `--morph`, `--xml`, or running the Streamlit app.
+- **`openai.error.RateLimitError`**: Increase `RATE_SLEEP` in `root_bulk_analyzer.py` or upgrade your quota.
+- **Missing `root` column**: The Streamlit UI expects a column named `root` (singular).
+- **Empty analysis rows**: Verify spelling of roots or check `logs/` for GPT parsing issues.
 
-* **`FileNotFoundError`**: Check the paths you pass to `--morph` or `--xml`.
-* **`openai.error.RateLimitError`**: Increase `RATE_SLEEP` or upgrade your OpenAI quota.
-* **Empty analysis rows**: The root might not exist in the morphology file; verify spelling.
+## 9. Acknowledgements
 
----
+- Morphology TSV adapted from **University of Leeds Quranic Arabic Corpus**.
+- XML from **Tanzil.net** Uthmani script.
+- Semantic analysis powered by **OpenAI GPT-4o**.
 
-## 8. Acknowledgements
-
-* Morphology TSV adapted from **University of Leeds Quranic Arabic Corpus**.
-* XML from **Tanzil.net** Uthmani script.
-* Semantic analysis powered by **OpenAI GPT‑4o**.
-
----
-
-Happy analysing!  
+Happy analysing!
