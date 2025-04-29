@@ -1,19 +1,6 @@
 #!/usr/bin/env python3
 """
-Streamlit UI for **root_bulk_analyzer.py**  – live logs, accurate progress bar, persistent downloads.
-
-• Upload CSV/Excel with a `root` column.
-• Runs `root_bulk_analyzer.py` as an unbuffered subprocess so `[INFO] …` lines
-  stream instantly.
-• Displays:
-    – A scrolling log (last 30 lines)
-    – A progress bar that advances per root
-    – A status line (Processed N/total)
-• Caches the resulting CSV and ZIP bytes in `st.session_state` so download
-  buttons remain after each click.
-
-Run:
-    streamlit run analyzer_ui.py
+Streamlit UI for **root_bulk_analyzer.py** – Excel output ready.
 """
 from __future__ import annotations
 
@@ -32,19 +19,17 @@ st.title("📖 Quran Root Bulk Analyzer (GPT-4o)")
 if "OPENAI_API_KEY" not in os.environ:
     st.warning("OPENAI_API_KEY is not set; the backend call may fail.")
 
-# Persistent storage for downloads across reruns
 for key in ("csv_data", "csv_name", "zip_data", "zip_name"):
     st.session_state.setdefault(key, None)
 
 st.markdown("Upload a **CSV** or **Excel** file containing a column named **`root`**.")
 
 # ---------------------------------------------------------------------------#
-# File upload section
+# File upload
 # ---------------------------------------------------------------------------#
 file = st.file_uploader("Choose file", type=["csv", "xlsx", "xls"])
 
 if file:
-    # ---------- read table ----------
     try:
         df = pd.read_excel(file) if file.name.lower().endswith((".xlsx", ".xls")) else pd.read_csv(file)
     except Exception as e:
@@ -59,15 +44,13 @@ if file:
     st.success(f"Loaded {total_roots:,} roots.")
     st.dataframe(df.head())
 
-    out_csv_name = st.text_input("Output CSV filename", value="roots_analysis.csv")
+    out_xlsx_name = st.text_input("Output Excel filename", value="roots_analysis.xlsx")
 
     # ------------------------------------------------------------------- run
     if st.button("Run bulk analysis 🚀"):
-        # reset previous downloads
         st.session_state.csv_data = None
         st.session_state.zip_data = None
 
-        # placeholders drawn *before* spinner so they remain visible
         st.markdown("### Live progress")
         log_box     = st.empty()
         status_line = st.empty()
@@ -80,13 +63,15 @@ if file:
                 df.to_csv(roots_csv, index=False, encoding="utf-8-sig")
 
                 ayah_dir = tmp_path / "ayahs_json"
-                out_csv  = tmp_path / out_csv_name
+                out_xlsx = tmp_path / out_xlsx_name
 
                 script_path = Path(__file__).with_name("root_bulk_analyzer.py")
-                cmd = [sys.executable, "-u", str(script_path),
-                       "--roots_csv", str(roots_csv),
-                       "--out_csv",  str(out_csv),
-                       "--ayahs_dir", str(ayah_dir)]
+                cmd = [
+                    sys.executable, "-u", str(script_path),
+                    "--roots_csv", str(roots_csv),
+                    "--out_csv",  str(out_xlsx),
+                    "--ayahs_dir", str(ayah_dir)
+                ]
 
                 logs: list[str] = []
                 processed = 0
@@ -110,9 +95,9 @@ if file:
                 status_line.markdown("**Analysis finished**")
 
                 # -------- load outputs into session_state --------
-                if out_csv.is_file():
-                    st.session_state.csv_data = out_csv.read_bytes()
-                    st.session_state.csv_name = out_csv_name
+                if out_xlsx.is_file():
+                    st.session_state.csv_data = out_xlsx.read_bytes()
+                    st.session_state.csv_name = out_xlsx_name
                 if ayah_dir.is_dir() and any(ayah_dir.iterdir()):
                     zip_path = tmp_path / "ayahs_json.zip"
                     shutil.make_archive(zip_path.with_suffix(""), "zip", ayah_dir)
@@ -122,15 +107,15 @@ if file:
                 st.success("Results ready – download below.")
 
 # ---------------------------------------------------------------------------#
-# Persistent download buttons
+# Download buttons
 # ---------------------------------------------------------------------------#
 if st.session_state.csv_data:
     st.download_button(
-        "📥 Download analysis CSV",
+        "📥 Download analysis Excel",
         data=st.session_state.csv_data,
         file_name=st.session_state.csv_name,
-        mime="text/csv",
-        key="csv_dl",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="xlsx_dl",
     )
 
 if st.session_state.zip_data:
