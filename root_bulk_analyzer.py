@@ -254,53 +254,66 @@ def _read_input_rows(csv_path: Path) -> Tuple[List[Dict[str, str]], List[str]]:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Analyse triliteral roots with GPT-4o (token-safe).")
     ap.add_argument("--roots_csv", default="data/root_sample_1.csv")
-    ap.add_argument("--out_csv", default="data/output/roots_analysis.csv")
+    ap.add_argument("--out_csv",   default="data/output/roots_analysis.csv")
     ap.add_argument("--ayahs_dir", default="data/output/ayahs_json")
-    ap.add_argument("--morph", default="data/quran-morphology.txt")
-    ap.add_argument("--xml", default="data/quran-uthmani.xml")
+    ap.add_argument("--morph",     default="data/quran-morphology.txt")
+    ap.add_argument("--xml",       default="data/quran-uthmani.xml")
     args = ap.parse_args()
 
     rows, orig_cols = _read_input_rows(Path(args.roots_csv))
     if not rows:
         sys.exit("[ERROR] ملف الإدخال لا يحتوي على جذور صالحة.")
 
-    ayah_dir = Path(args.ayahs_dir); ayah_dir.mkdir(parents=True, exist_ok=True)
+    out_p   = Path(args.out_csv)
+    out_p.parent.mkdir(parents=True, exist_ok=True)
+    ayah_dir = Path(args.ayahs_dir)
+    ayah_dir.mkdir(parents=True, exist_ok=True)
 
+    # -----------------------------------------------------------------------
+    # 2️⃣  **RESUME SUPPORT** — skip roots already present in a partial CSV
+    # -----------------------------------------------------------------------
+    processed: set[str] = set()
+    if out_p.is_file():
+        with out_p.open(encoding="utf-8-sig") as fh:
+            processed = {row.get("root") or row.get("الجذر")              # type: ignore
+                         for row in csv.DictReader(fh) if (row.get("root") or row.get("الجذر"))}
+
+    final_cols = orig_cols + [c for c in ANALYSIS_COLUMNS + TOKEN_COLUMNS if c not in orig_cols]
+
+    # -----------------------------------------------------------------------
+    # main loop
+    # -----------------------------------------------------------------------
     for r in rows:
         root_val = (r.get("الجذر") or r.get("root") or "").strip()
-        r.setdefault("tokens_prompt", 0)
-        r.setdefault("tokens_completion", 0)
         if not root_val:
-            for col in ANALYSIS_COLUMNS:
-                r.setdefault(col, "")
             continue
+        if root_val in processed:
+            print(f"[SKIP] {root_val} already analysed.")
+            continue
+
+        # ---- original GPT + parsing logic (unchanged) ---------------------
         verses = extract_verses_by_root(root_val, args.morph, args.xml)
-        (ayah_dir / f"{root_val}.json").write_text(json.dumps(verses, ensure_ascii=False, indent=2), encoding="utf-8")
-        if not verses:
-            print(f"[WARN] لا توجد آيات للجذر {root_val}")
-            for col in ANALYSIS_COLUMNS:
-                r.setdefault(col, "")
-            time.sleep(RATE_SLEEP)
-            continue
+        (ayah_dir / f"{root_val}.json").write_text(
+            json.dumps(verses, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         reply, p_tok, c_tok = _gpt_ask(root_val, verses)
         r.update(_parse_sections(reply))
-        r["tokens_prompt"] = p_tok
+        r["tokens_prompt"]     = p_tok
         r["tokens_completion"] = c_tok
+
+        # ------------------------------------------------------------------
+        # 3️⃣  **WRITE PROGRESS IMMEDIATELY** — append a row after each root
+        # ------------------------------------------------------------------
+        with out_p.open("a", newline="", encoding="utf-8-sig") as fh:
+            w = csv.DictWriter(fh, fieldnames=final_cols)
+            if fh.tell() == 0:          # file was just created
+                w.writeheader()
+            w.writerow(r)
+
+        processed.add(root_val)         # so we can skip it if the app restarts
         time.sleep(RATE_SLEEP)
 
-    final_cols: List[str] = orig_cols[:]
-    for col in ANALYSIS_COLUMNS + TOKEN_COLUMNS:
-        if col not in final_cols:
-            final_cols.append(col)
-
-    out_p = Path(args.out_csv); out_p.parent.mkdir(parents=True, exist_ok=True)
-    with out_p.open("w", newline="", encoding="utf-8-sig") as fh:
-        w = csv.DictWriter(fh, fieldnames=final_cols)
-        w.writeheader()
-        w.writerows(rows)
-
     print(f"[OK] CSV → {out_p}\n[OK] Ayah JSON → {ayah_dir}")
-
 
 if __name__ == "__main__" and sys.argv[0].endswith("root_bulk_analyzer.py"):
     main()
